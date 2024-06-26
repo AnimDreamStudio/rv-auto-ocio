@@ -12,12 +12,25 @@ root_path = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
 
 DEFAULT_PIPE = {}
 
+DEFAULT_RV_PIPE = {
+    "RVLinearizePipelineGroup": ["RVLinearize", "RVLensWarp"],
+    "RVLookPipelineGroup": ["RVLookLUT"],
+    "RVDisplayPipelineGroup": ["RVDisplayColor"],
+}
+
 OCIO_ROLES = {"OCIOFile": "RVLinearizePipelineGroup", "OCIOLook": "RVLookPipelineGroup"}
 
 OCIO_DEFAULTS = {}
 
 METHODS = ["ocio_config_from_media", "ocio_node_from_media"]
 
+OCIO_FORMAT_SUPPORT = {
+    ".exr": "ACES - ACES2065-1",
+    ".png": "ACES - ACEScc",
+    ".dpx": "ACES - ACEScct",
+    ".jpg": "ACES - ACEScg",
+    ".jpeg": "ACES - ACEScg",
+}
 
 def read_auto_ocio(*args, **kwargs):
     """
@@ -232,7 +245,7 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
 
     There are many assumptions here. First and foremost is that your OCIO
     worflow uses parseColorSpaceFromString() to determine incoming color
-    space. 
+    space.
 
     ORDERING: this mode uses a sort key of "source_setup" with an
     ordering value of 10 which is after the default source_setup
@@ -311,8 +324,20 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
 
         try:
             if pipeSlot not in DEFAULT_PIPE:
-                default = commands.getStringProperty(srcPipeline + ".pipeline.nodes")
-                DEFAULT_PIPE[pipeSlot] = default
+                currentPipelineNodes = commands.getStringProperty(
+                    srcPipeline + ".pipeline.nodes"
+                )
+
+                # We need to handle the following special case here:
+                # We might be in the process of reloading an RV session that
+                # is already OCIO color corrected in which case we do not
+                # want this pipeline to be considered the default (non OCIO).
+                # Example: srcPipelineNodes = [ "OCIOFile" "RVLensWarp" ]
+                # We will use the RV default instead in that special case.
+                if nodeType in currentPipelineNodes and pipeSlot in DEFAULT_RV_PIPE:
+                    DEFAULT_PIPE[pipeSlot] = DEFAULT_RV_PIPE[pipeSlot]
+                else:
+                    DEFAULT_PIPE[pipeSlot] = currentPipelineNodes
             pipelineList = ocio_node_from_media(
                 self.config, srcPipeline, DEFAULT_PIPE[pipeSlot], media, attrDict
             )
@@ -353,7 +378,7 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
     def disableSourceOCIO(self, source, nodeType):
         """
         This reverts the source group's linearize node back to using
-        a native RVLinearize node. 
+        a native RVLinearize node.
         """
 
         pipeSlot = OCIO_ROLES[nodeType]
@@ -373,7 +398,7 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
 
     def useDisplayOCIO(self, group):
         """
-        This installs the OCIODisplay node in the DisplayGroup's display pipeline 
+        This installs the OCIODisplay node in the DisplayGroup's display pipeline
         in place of RV's RVDisplayColor node.
 
         NOTE: in RV4 all display devices are separate
@@ -388,8 +413,22 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         try:
             dpipeline = groupMemberOfType(group, groupName)
             if groupName not in DEFAULT_PIPE:
-                default = commands.getStringProperty(dpipeline + ".pipeline.nodes")
-                DEFAULT_PIPE[groupName] = default
+                currentPipelineNodes = commands.getStringProperty(
+                    dpipeline + ".pipeline.nodes"
+                )
+
+                # We need to handle the following special case here:
+                # We might be in the process of reloading an RV session that
+                # is already OCIO color corrected in which case we do not
+                # want this pipeline to be considered the default (non OCIO).
+                # We will use the RV default instead in that special case.
+                if (
+                    "OCIODisplay" in currentPipelineNodes
+                    and groupName in DEFAULT_RV_PIPE
+                ):
+                    DEFAULT_PIPE[groupName] = DEFAULT_RV_PIPE[groupName]
+                else:
+                    DEFAULT_PIPE[groupName] = currentPipelineNodes
             pipelineList = ocio_node_from_media(
                 self.config, dpipeline, DEFAULT_PIPE[groupName]
             )
@@ -549,32 +588,26 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         """
         event.reject()
 
-        if not self.source_format:
+        # check auto changed color space rule.
+        if not self.source_format or self.source_format not in OCIO_FORMAT_SUPPORT.keys():
             return
-
-        # print("===", commands.nodeType(node))
+        print("Format is ", self.source_format)
         if isOCIOManaged("OCIOFile")() == commands.UncheckedMenuState:
             self.ocioActiveEvent("OCIOFile")(event)
 
-        # ocioEvent("OCIOFile", "ocio.inColorSpace", "ACES - ACEScg")(event)
-        # ocioEvent("OCIOFile", "ocio.inColorSpace", "ACES - ACEScg")
-        nodeType = "OCIOFile"
-        prop = "ocio.inColorSpace"
-        value = "ACES - ACEScg"
-        commands.setStringProperty("#" + nodeType + "." + prop, [value], True)
-        commands.redraw()
-        
+        # set ocio file color space.
+        value = OCIO_FORMAT_SUPPORT[self.source_format]
+        result = ocioMenuCheck("OCIOFile", "ocio.inColorSpace", value)()
+        if result != commands.DisabledMenuState:
+            property_name = "#OCIOFile.ocio.inColorSpace"
+            commands.setStringProperty(property_name, [value], True)
+            commands.redraw()
+
     def newSourceNode(self, event):
         event.reject()
 
         # Update allow file format prefix.
         node = event.contents()
-
-        # enable colorspace.
-        for display in commands.nodesOfType("RVDisplayGroup"):
-            state = isOCIODisplayManaged(display)()
-            if state == commands.UncheckedMenuState:
-                self.ocioActiveEvent(display)(event)
 
         if commands.nodeType(node) == "RVFileSource":
             args = event.contents().split(";;")
@@ -582,6 +615,15 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
             sourceMedia = commands.sourceMedia(group)
             sourceMediaInfo = commands.sourceMediaInfo(node, None)
             _, self.source_format = os.path.splitext(sourceMediaInfo.get("file", ""))
+        
+        if self.source_format not in OCIO_FORMAT_SUPPORT.keys():
+            return
+
+        # enable colorspace.
+        for display in commands.nodesOfType("RVDisplayGroup"):
+            state = isOCIODisplayManaged(display)()
+            if state == commands.UncheckedMenuState:
+                self.ocioActiveEvent(display)(event)
 
     def selectConfig(self, event):
         try:
@@ -641,7 +683,12 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         #
 
         cssList = [
-            ("Active", self.ocioActiveEvent("OCIOFile"), None, isOCIOManaged("OCIOFile")),
+            (
+                "Active",
+                self.ocioActiveEvent("OCIOFile"),
+                None,
+                isOCIOManaged("OCIOFile"),
+            ),
             ("_", None),
         ]
         csaList = []
@@ -699,7 +746,12 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         #
 
         lsList = [
-            ("Active", self.ocioActiveEvent("OCIOLook"), None, isOCIOManaged("OCIOLook")),
+            (
+                "Active",
+                self.ocioActiveEvent("OCIOLook"),
+                None,
+                isOCIOManaged("OCIOLook"),
+            ),
             ("_", None),
         ]
         laList = []
@@ -740,7 +792,7 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         ]
         final += daList
 
-        return [("OCIO", final)]
+        return [("OCIO-X", final)]
 
     def __init__(self):
         rvtypes.MinorMode.__init__(self)

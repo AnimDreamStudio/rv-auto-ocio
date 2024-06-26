@@ -1,19 +1,21 @@
-package: Auto OpenColorIO
+package: Auto OpenColorIO X
 author: leo.
 organization: leo.
 version: 1.0
-requires: ''
+requires: ""
 rv: 4.0
 optional: true
 system: true
 hidden: false
 
-modes: 
+modes:
   - file: auto_ocio_setup.py
-    menu: ''
-    shortcut: ''
-    event: ''
+    menu: ""
+    shortcut: ""
+    event: ""
     load: immediate
 
 description: |
-    <p> Auto Switch Ocio colorspace From Source. </p>
+  <p> Auto Switch Ocio colorspace From Source. </p>
+  <p> Copy From RV Source Code 😓. </p>
+  <p> Must Unload RV  `OpenColorIO Basic Color Management` 😓. </p>
