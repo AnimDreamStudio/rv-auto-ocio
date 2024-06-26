@@ -36,7 +36,7 @@ zip auto_ocio_setup-1.0.rvpkg ocio_source_setup.py PACKAGE
 1. 将打包后的 `.rvpkg` 格式的文件移动到 安装目录下的 `/plugins/Packages` 文件夹.
 2. 将 `auto_ocio_setup.py` 文件复制到 `/plugins/Python` 文件夹.
 
-### 通过环境 bianlaing
+### 通过环境变量
 
 ```shell
 RV_SUPPORT_PATH
