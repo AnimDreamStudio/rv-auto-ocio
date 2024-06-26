@@ -539,6 +539,50 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         if event.contents().endswith("ocio_display.display"):
             commands.defineModeMenu("OCIO Source Setup", self.buildOCIOMenu(), True)
 
+    # ============================================================
+    # ⚡new media source change callback.
+    # ============================================================
+    def newSource(self, event):
+        """
+        New source node create.
+
+        """
+        event.reject()
+
+        if not self.source_format:
+            return
+
+        # print("===", commands.nodeType(node))
+        if isOCIOManaged("OCIOFile")() == commands.UncheckedMenuState:
+            self.ocioActiveEvent("OCIOFile")(event)
+
+        # ocioEvent("OCIOFile", "ocio.inColorSpace", "ACES - ACEScg")(event)
+        # ocioEvent("OCIOFile", "ocio.inColorSpace", "ACES - ACEScg")
+        nodeType = "OCIOFile"
+        prop = "ocio.inColorSpace"
+        value = "ACES - ACEScg"
+        commands.setStringProperty("#" + nodeType + "." + prop, [value], True)
+        commands.redraw()
+        
+    def newSourceNode(self, event):
+        event.reject()
+
+        # Update allow file format prefix.
+        node = event.contents()
+
+        # enable colorspace.
+        for display in commands.nodesOfType("RVDisplayGroup"):
+            state = isOCIODisplayManaged(display)()
+            if state == commands.UncheckedMenuState:
+                self.ocioActiveEvent(display)(event)
+
+        if commands.nodeType(node) == "RVFileSource":
+            args = event.contents().split(";;")
+            group = args[0]
+            sourceMedia = commands.sourceMedia(group)
+            sourceMediaInfo = commands.sourceMediaInfo(node, None)
+            _, self.source_format = os.path.splitext(sourceMediaInfo.get("file", ""))
+
     def selectConfig(self, event):
         try:
             config = commands.openFileDialog(
@@ -696,11 +740,12 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         ]
         final += daList
 
-        return [("OCIO-X", final)]
+        return [("OCIO", final)]
 
     def __init__(self):
         rvtypes.MinorMode.__init__(self)
 
+        self.source_format = ""
         self.usingOCIOForDisplay = {}
         self.readingSession = False
         self.config = None
@@ -745,6 +790,8 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
                 ("graph-new-node", self.checkForDisplayGroup, ""),
                 ("graph-node-inputs-changed", self.checkForDisplayGroup, ""),
                 ("graph-state-change", self.maybeUpdateViews, ""),
+                ("new-source", self.newSourceNode, ""),
+                ("graph-new-node", self.newSource, ""),
             ],
             self.buildOCIOMenu(),
             "source_setup",
