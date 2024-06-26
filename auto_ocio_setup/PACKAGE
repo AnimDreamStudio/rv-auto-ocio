@@ -1,0 +1,19 @@
+package: Auto OpenColorIO
+author: leo.
+organization: leo.
+version: 1.0
+requires: ''
+rv: 4.0
+optional: true
+system: true
+hidden: false
+
+modes: 
+  - file: auto_ocio_setup.py
+    menu: ''
+    shortcut: ''
+    event: ''
+    load: immediate
+
+description: |
+    <p> Auto Switch Ocio colorspace From Source. </p>
