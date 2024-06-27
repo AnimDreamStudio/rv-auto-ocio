@@ -591,45 +591,84 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
     # ============================================================
     # ⚡new media source change callback.
     # ============================================================
-    def newSource(self, event):
+    def onActiveFileOCIO(self, event):
         """
         New source node create.
 
         """
         event.reject()
 
-        # check auto changed color space rule.
-        if not self.source_format or self.source_format not in FILE_OCIO_FORMAT_SUPPORT.keys():
-            return
-        # print("Format is ", self.source_format)
-        if isOCIOManaged("OCIOFile")() == commands.UncheckedMenuState:
-            self.ocioActiveEvent("OCIOFile")(event)
+        # # check auto changed color space rule.
+        # if not self.source_format or self.source_format not in FILE_OCIO_FORMAT_SUPPORT.keys():
+        #     return
+        # # print("Format is ", self.source_format)
+        # if isOCIOManaged("OCIOFile")() == commands.UncheckedMenuState:
+        #     self.ocioActiveEvent("OCIOFile")(event)
 
-        # set ocio file color space.
-        value = FILE_OCIO_FORMAT_SUPPORT[self.source_format]
-        result = ocioMenuCheck("OCIOFile", "ocio.inColorSpace", value)()
-        if result != commands.DisabledMenuState:
-            property_name = "#OCIOFile.ocio.inColorSpace"
-            commands.setStringProperty(property_name, [value], True)
-            commands.redraw()
+        # # ocio file in colorspace property name.
+        # property_name = "#OCIOFile.ocio.inColorSpace"
 
-    def newSourceNode(self, event):
+        # # set ocio file color space.
+        # value = FILE_OCIO_FORMAT_SUPPORT[self.source_format]
+        # result = ocioMenuCheck("OCIOFile", "ocio.inColorSpace", value)()
+        # if result != commands.DisabledMenuState:
+        #     # get current property name.
+        #     current_property_name = commands.getStringProperty(property_name)
+        #     # print(current_property_name, value)
+        #     if current_property_name == value:
+        #         return
+
+        #     commands.setStringProperty(property_name, [value], True)
+        #     commands.redraw()
+
+    def onActiveDisplayOCIO(self, event):
         event.reject()
 
-        # Update allow file format prefix.
-        node = event.contents()
+        # # Update allow file format prefix.
+        # node = event.contents()
 
-        if commands.nodeType(node) == "RVFileSource":
-            args = event.contents().split(";;")
-            group = args[0]
-            sourceMedia = commands.sourceMedia(group)
-            sourceMediaInfo = commands.sourceMediaInfo(node, None)
-            _, self.source_format = os.path.splitext(sourceMediaInfo.get("file", ""))
+        # if commands.nodeType(node) == "RVFileSource":
+        #     args = event.contents().split(";;")
+        #     group = args[0]
+        #     sourceMedia = commands.sourceMedia(group)
+        #     sourceMediaInfo = commands.sourceMediaInfo(node, None)
+        #     _, self.source_format = os.path.splitext(sourceMediaInfo.get("file", ""))
         
-        if self.source_format not in DISPLAY_OCIO_FORMAT_SUPPORT.keys():
+        # if self.source_format not in DISPLAY_OCIO_FORMAT_SUPPORT.keys():
+        #     return
+
+        # # enable colorspace.
+        # for display in commands.nodesOfType("RVDisplayGroup"):
+        #     state = isOCIODisplayManaged(display)()
+        #     if state == commands.UncheckedMenuState:
+        #         self.ocioActiveEvent(display)(event)
+
+        #     view = DISPLAY_OCIO_FORMAT_SUPPORT[self.source_format]
+        #     ocioDisplayEvent(display, DISPLAY_KEY, view)(event)
+
+    def rangeChanged(self, event):
+        event.reject()
+        # print(event.key())
+        # print(dir(event))
+        # print(dir(commands))
+
+    def onIncomingSource(self, event):
+        event.reject()
+        parts = event.contents().split(";")
+        in_path = parts[0]
+        _, self.source_format = os.path.splitext(in_path)
+
+    def afterProgressiveLoading(self, event):
+        event.reject()
+        if not self.source_format:
             return
 
-        # enable colorspace.
+        # set frame to last frame, It is easy to set the color space of each picture correctly.
+        commands.setFrame(commands.frameEnd())
+        # check source ext is in a predefined rule.
+        if self.source_format not in DISPLAY_OCIO_FORMAT_SUPPORT.keys():
+            return
+        # active view display ocio output.
         for display in commands.nodesOfType("RVDisplayGroup"):
             state = isOCIODisplayManaged(display)()
             if state == commands.UncheckedMenuState:
@@ -637,6 +676,32 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
 
             view = DISPLAY_OCIO_FORMAT_SUPPORT[self.source_format]
             ocioDisplayEvent(display, DISPLAY_KEY, view)(event)
+
+        # check source ext is in file ocio config rule.
+        if self.source_format not in FILE_OCIO_FORMAT_SUPPORT.keys():
+            return
+        if isOCIOManaged("OCIOFile")() == commands.UncheckedMenuState:
+            self.ocioActiveEvent("OCIOFile")(event)
+        # ocio file in colorspace property name.
+        property_name = "#OCIOFile.ocio.inColorSpace"
+        # set ocio file color space.
+        value = FILE_OCIO_FORMAT_SUPPORT[self.source_format]
+        result = ocioMenuCheck("OCIOFile", "ocio.inColorSpace", value)()
+        if result != commands.DisabledMenuState:
+            # get current property name.
+            current_property_name = commands.getStringProperty(property_name)
+            # print(current_property_name, value)
+            if current_property_name == value:
+                return
+
+            commands.setStringProperty(property_name, [value], True)
+            commands.redraw()
+
+    def updateMainNodeEvent(self, event):
+        event.reject()
+        # print("=============", event.contents())
+        # info = commands.sourceMediaInfo()
+        # print("xx = ", info)
 
     def selectConfig(self, event):
         try:
@@ -855,8 +920,12 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
                 ("graph-new-node", self.checkForDisplayGroup, ""),
                 ("graph-node-inputs-changed", self.checkForDisplayGroup, ""),
                 ("graph-state-change", self.maybeUpdateViews, ""),
-                ("new-source", self.newSourceNode, ""),
-                ("graph-new-node", self.newSource, ""),
+                # ("new-source", self.onActiveDisplayOCIO, ""),
+                # ("graph-new-node", self.onActiveFileOCIO, ""),
+                # ("range-changed", self.rangeChanged, ""),
+                # ("frame-changed", self.updateMainNodeEvent, ""),
+                ("incoming-source-path", self.onIncomingSource, ""),
+                ("after-progressive-loading", self.afterProgressiveLoading, ""),
             ],
             self.buildOCIOMenu(),
             "source_setup",
