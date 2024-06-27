@@ -24,12 +24,22 @@ OCIO_DEFAULTS = {}
 
 METHODS = ["ocio_config_from_media", "ocio_node_from_media"]
 
-OCIO_FORMAT_SUPPORT = {
+FILE_OCIO_FORMAT_SUPPORT = {
     ".exr": "ACES - ACES2065-1",
     ".png": "ACES - ACEScc",
     ".dpx": "ACES - ACEScct",
     ".jpg": "ACES - ACEScg",
     ".jpeg": "ACES - ACEScg",
+}
+
+DISPLAY_KEY = "ACES"
+
+DISPLAY_OCIO_FORMAT_SUPPORT = {
+    ".exr": "Rec.709",
+    ".png": "Rec.2020",
+    ".dpx": "DCDM P3 gamut clip",
+    ".jpg": "Raw",
+    ".jpeg": "Log",
 }
 
 def read_auto_ocio(*args, **kwargs):
@@ -589,14 +599,14 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         event.reject()
 
         # check auto changed color space rule.
-        if not self.source_format or self.source_format not in OCIO_FORMAT_SUPPORT.keys():
+        if not self.source_format or self.source_format not in FILE_OCIO_FORMAT_SUPPORT.keys():
             return
-        print("Format is ", self.source_format)
+        # print("Format is ", self.source_format)
         if isOCIOManaged("OCIOFile")() == commands.UncheckedMenuState:
             self.ocioActiveEvent("OCIOFile")(event)
 
         # set ocio file color space.
-        value = OCIO_FORMAT_SUPPORT[self.source_format]
+        value = FILE_OCIO_FORMAT_SUPPORT[self.source_format]
         result = ocioMenuCheck("OCIOFile", "ocio.inColorSpace", value)()
         if result != commands.DisabledMenuState:
             property_name = "#OCIOFile.ocio.inColorSpace"
@@ -616,7 +626,7 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
             sourceMediaInfo = commands.sourceMediaInfo(node, None)
             _, self.source_format = os.path.splitext(sourceMediaInfo.get("file", ""))
         
-        if self.source_format not in OCIO_FORMAT_SUPPORT.keys():
+        if self.source_format not in DISPLAY_OCIO_FORMAT_SUPPORT.keys():
             return
 
         # enable colorspace.
@@ -624,6 +634,9 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
             state = isOCIODisplayManaged(display)()
             if state == commands.UncheckedMenuState:
                 self.ocioActiveEvent(display)(event)
+
+            view = DISPLAY_OCIO_FORMAT_SUPPORT[self.source_format]
+            ocioDisplayEvent(display, DISPLAY_KEY, view)(event)
 
     def selectConfig(self, event):
         try:
