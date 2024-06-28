@@ -750,8 +750,10 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
             if not sourceFile:
                 continue
             _, ext = os.path.splitext(sourceFile)
+            if ext == self.last_source:
+                continue
             self._updateOCIOFromSource(event, ext)
-            
+            self.last_source = ext
 
     def selectConfig(self, event):
         try:
@@ -926,6 +928,7 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         rvtypes.MinorMode.__init__(self)
 
         self.source_format = ""
+        self.last_source = ""
         self.usingOCIOForDisplay = {}
         self.readingSession = False
         self.config = None
