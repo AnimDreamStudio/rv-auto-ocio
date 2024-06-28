@@ -13,6 +13,7 @@ open rv auto ocio setting from file format.
 ## 如何修改:
 
 ![Alt text](image.png)
+
 打开 `auto_ocio_setup.py` 文件：
 
 1. 找到 `FILE_OCIO_FORMAT_SUPPORT` 全局变量，这里定义了 File Color Space 和文件格式对应的色彩空间.
