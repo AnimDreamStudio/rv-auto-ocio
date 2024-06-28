@@ -2,6 +2,12 @@
 
 open rv auto ocio setting from file format.
 
+## 插件信息:
+
+Author: 白衬衣
+
+Date : 2024/06
+
 ## 插件说明:
 
 > 插件从官方源码修改而来，是为了实现根据图片格式自动切换色彩空间.
