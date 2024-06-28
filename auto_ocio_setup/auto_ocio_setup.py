@@ -646,6 +646,49 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
         #     view = DISPLAY_OCIO_FORMAT_SUPPORT[self.source_format]
         #     ocioDisplayEvent(display, DISPLAY_KEY, view)(event)
 
+    def _updateOCIOFromSource(self, event, ext):
+        """
+        Update file and displays OCIO from source media info.
+
+        Args:
+            event : current event.
+            ext   : source file ext.
+
+        Returns:
+            None.
+
+        """
+        if ext not in DISPLAY_OCIO_FORMAT_SUPPORT.keys():
+            return
+        # active view display ocio output.
+        for display in commands.nodesOfType("RVDisplayGroup"):
+            state = isOCIODisplayManaged(display)()
+            if state == commands.UncheckedMenuState:
+                self.ocioActiveEvent(display)(event)
+
+            view = DISPLAY_OCIO_FORMAT_SUPPORT[ext]
+            ocioDisplayEvent(display, DISPLAY_KEY, view)(event)
+
+        # check source ext is in file ocio config rule.
+        if ext not in FILE_OCIO_FORMAT_SUPPORT.keys():
+            return
+        if isOCIOManaged("OCIOFile")() == commands.UncheckedMenuState:
+            self.ocioActiveEvent("OCIOFile")(event)
+        # ocio file in colorspace property name.
+        property_name = "#OCIOFile.ocio.inColorSpace"
+        # set ocio file color space.
+        value = FILE_OCIO_FORMAT_SUPPORT[ext]
+        result = ocioMenuCheck("OCIOFile", "ocio.inColorSpace", value)()
+        if result != commands.DisabledMenuState:
+            # get current property name.
+            current_property_name = commands.getStringProperty(property_name)
+            # print(current_property_name, value)
+            if current_property_name == value:
+                return
+
+            commands.setStringProperty(property_name, [value], True)
+            commands.redraw()
+
     def rangeChanged(self, event):
         event.reject()
         # print(event.key())
@@ -699,9 +742,16 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
 
     def updateMainNodeEvent(self, event):
         event.reject()
-        # print("=============", event.contents())
-        # info = commands.sourceMediaInfo()
-        # print("xx = ", info)
+
+        sources = commands.sourcesAtFrame(commands.frame())
+        for source in sources:
+            sourceMediaInfo = commands.sourceMediaInfo(source)
+            sourceFile = sourceMediaInfo.get("file", "")
+            if not sourceFile:
+                continue
+            _, ext = os.path.splitext(sourceFile)
+            self._updateOCIOFromSource(event, ext)
+            
 
     def selectConfig(self, event):
         try:
@@ -923,7 +973,7 @@ class OCIOSourceSetupMode(rvtypes.MinorMode):
                 # ("new-source", self.onActiveDisplayOCIO, ""),
                 # ("graph-new-node", self.onActiveFileOCIO, ""),
                 # ("range-changed", self.rangeChanged, ""),
-                # ("frame-changed", self.updateMainNodeEvent, ""),
+                ("frame-changed", self.updateMainNodeEvent, ""),
                 ("incoming-source-path", self.onIncomingSource, ""),
                 ("after-progressive-loading", self.afterProgressiveLoading, ""),
             ],
