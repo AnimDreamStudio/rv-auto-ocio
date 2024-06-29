@@ -40,7 +40,7 @@ Date : 2024/06
 命令行使用 `zip.exe` 打包
 
 ```shell
-zip auto_ocio_setup-1.0.rvpkg ocio_source_setup.py PACKAGE
+zip auto_ocio_setup-1.0.rvpkg auto_ocio_setup.py PACKAGE
 ```
 
 ## 如何安装
